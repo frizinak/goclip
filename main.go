@@ -22,7 +22,7 @@ var (
 	saveInterval  = time.Second * 30
 	l             = log.New(os.Stdout, "", 0)
 	xselCopy      = []string{"xsel", "-ib"}
-	xselPaste     = []string{"xsel", "-b"}
+	xselPaste     = []string{"xsel", "-ob"}
 )
 
 func xpaste() (out []byte, err error) {
@@ -41,13 +41,11 @@ func xpaste() (out []byte, err error) {
 	return
 }
 
-func xcopy(data []byte) (out []byte, err error) {
+func xcopy(data []byte) (err error) {
 	cmd := exec.Command(xselCopy[0], xselCopy[1:]...)
 
-	var stdout bytes.Buffer
 	var stdin io.WriteCloser
 
-	cmd.Stdout = &stdout
 	stdin, err = cmd.StdinPipe()
 
 	if err != nil {
@@ -70,8 +68,6 @@ func xcopy(data []byte) (out []byte, err error) {
 	if err = cmd.Wait(); err != nil {
 		return
 	}
-
-	out = stdout.Bytes()
 
 	return
 }
@@ -136,7 +132,7 @@ func daemon() error {
 		}
 		for {
 			new, _ := xpaste()
-			if len(new) <= maxBytes {
+			if len(new) != 0 && len(new) <= maxBytes {
 				new = append(
 					bytes.Replace(
 						new,
