@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,6 +17,7 @@ import (
 )
 
 var (
+	xselTimeout   = time.Second * 2
 	maxTotalBytes = 1024 * 1024 * 250
 	maxBytes      = 1024 * 256
 	port          = 10345
@@ -35,8 +37,19 @@ func xpaste() (out []byte, err error) {
 		return
 	}
 
-	err = cmd.Wait()
-	out = stdout.Bytes()
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err = <-done:
+		out = stdout.Bytes()
+		return
+	case <-time.After(xselTimeout):
+		cmd.Process.Kill()
+		err = fmt.Errorf("xsel timed out after %s", xselTimeout)
+	}
 
 	return
 }
@@ -65,8 +78,16 @@ func xcopy(data []byte) (err error) {
 	}
 	stdin.Close()
 
-	if err = cmd.Wait(); err != nil {
+	done := make(chan error)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err = <-done:
 		return
+	case <-time.After(xselTimeout):
+		err = fmt.Errorf("xsel timed out after %s", xselTimeout)
 	}
 
 	return
