@@ -14,12 +14,14 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 var (
 	xselTimeout   = time.Second * 2
 	maxTotalBytes = 1024 * 1024 * 250
 	maxBytes      = 1024 * 256
+	minLen        = 0
 	port          = 10345
 	saveInterval  = time.Second * 30
 	l             = log.New(os.Stdout, "", 0)
@@ -152,24 +154,32 @@ func daemon() error {
 			last = data[len(data)-1]
 		}
 		for {
+			time.Sleep(time.Millisecond * 250)
 			new, _ := xpaste()
-			if len(new) != 0 && len(new) <= maxBytes {
-				new = append(
-					bytes.Replace(
-						new,
-						[]byte{'\n'},
-						[]byte{0},
-						-1,
-					),
-					'\n',
-				)
-				if !bytes.Equal(last, new) {
-					last = new
-					items <- new
+			if minLen > 0 {
+				if strlen := utf8.RuneCount(new); strlen < minLen {
+					continue
 				}
 			}
 
-			time.Sleep(time.Millisecond * 250)
+			if len(new) == 0 || len(new) > maxBytes {
+				continue
+			}
+
+			new = append(
+				bytes.Replace(
+					new,
+					[]byte{'\n'},
+					[]byte{0},
+					-1,
+				),
+				'\n',
+			)
+
+			if !bytes.Equal(last, new) {
+				last = new
+				items <- new
+			}
 		}
 	}()
 
@@ -237,6 +247,7 @@ func main() {
 	_maxTotalBytes := flag.Int("t", 0, "Max size in bytes")
 	_maxBytes := flag.Int("m", 0, "Max size in bytes for a single entry")
 	_saveInterval := flag.Int("i", 0, "Save interval in seconds")
+	_minLen := flag.Int("l", 0, "Minimum length of string in clipboard")
 	decode := flag.Bool("d", false, "Decode and pipe to xsel -ib")
 	flag.Parse()
 
@@ -246,6 +257,10 @@ func main() {
 
 	if *_maxBytes > 0 {
 		maxBytes = *_maxBytes
+	}
+
+	if *_minLen > 0 {
+		minLen = *_minLen
 	}
 
 	if *_saveInterval > 0 {
